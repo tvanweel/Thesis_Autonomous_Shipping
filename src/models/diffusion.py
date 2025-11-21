@@ -72,55 +72,78 @@ class MultiLevelAutomationDiffusion:
     """
     Models adoption of maritime automation levels with hierarchical constraints.
 
-    Each automation level (L2, L3, L4-L5) has its own Bass diffusion model.
-    Ships transition from manual (Level 0) to increasingly automated levels.
+    Each automation level (L1-L5) has its own Bass diffusion model based on CCNR definitions:
+    - L0: Manual operation (baseline, implicit non-adopters)
+    - L1: Steering assistance (track pilot with basic automation)
+    - L2: Partial automation (track pilot + propulsion control)
+    - L3: Conditional automation (with collision avoidance systems)
+    - L4: High automation (advanced autonomous capabilities)
+    - L5: Full automation (fully autonomous vessels)
 
     Hierarchical constraints enforce that higher automation levels can only exist
     if the vessel has adopted the lower levels:
-    - L4-L5 <= L3 <= L2
-    - Total adoption <= total_fleet
+    - L5 <= L4 <= L3 <= L2 <= L1 <= total_fleet
+    - Each level constrained by its market potential
 
     Real-world context (as of model initialization):
-    - Total fleet: 8000 vessels (all initially manual)
-    - Level 2 (partial automation): ~900 vessels, high market capacity
-    - Level 3 (conditional automation): Not yet implemented (0 vessels)
-    - Level 4-5 (high/full automation): Combined, not yet implemented (0 vessels)
+    - Total fleet: ~10,000 vessels in European inland shipping
+    - L1+L2: ~900 vessels with track pilot systems (initial adopters)
+    - L3-L5: Not yet implemented (0 vessels, technologies in development)
     """
 
     def __init__(
         self,
         total_fleet: int,
         # Initial adopters at each level
+        initial_L1: float = 0.0,
         initial_L2: float = 0.0,
         initial_L3: float = 0.0,
-        initial_L45: float = 0.0,
+        initial_L4: float = 0.0,
+        initial_L5: float = 0.0,
         # Market potentials (maximum vessels that could adopt each level)
+        M1: float = 0.0,
         M2: float = 0.0,
         M3: float = 0.0,
-        M45: float = 0.0,
+        M4: float = 0.0,
+        M5: float = 0.0,
         # Bass parameters per level (p=innovation, q=imitation)
+        p1: float = 0.0,
+        q1: float = 0.0,
         p2: float = 0.0,
         q2: float = 0.0,
         p3: float = 0.0,
         q3: float = 0.0,
-        p45: float = 0.0,
-        q45: float = 0.0,
+        p4: float = 0.0,
+        q4: float = 0.0,
+        p5: float = 0.0,
+        q5: float = 0.0,
         dt: float = 1.0,
     ):
         self.total_fleet = float(total_fleet)
         self.dt = float(dt)
 
         # Store market potentials
+        self.M1 = float(M1)
         self.M2 = float(M2)
         self.M3 = float(M3)
-        self.M45 = float(M45)
+        self.M4 = float(M4)
+        self.M5 = float(M5)
 
         # Enforce initial hierarchical constraints
-        initial_L2 = min(float(initial_L2), self.M2, self.total_fleet)
+        initial_L1 = min(float(initial_L1), self.M1, self.total_fleet)
+        initial_L2 = min(float(initial_L2), self.M2, initial_L1)
         initial_L3 = min(float(initial_L3), self.M3, initial_L2)
-        initial_L45 = min(float(initial_L45), self.M45, initial_L3)
+        initial_L4 = min(float(initial_L4), self.M4, initial_L3)
+        initial_L5 = min(float(initial_L5), self.M5, initial_L4)
 
         # Create separate Bass diffusion model for each automation level
+        self.l1_model = BassDiffusionModel(
+            market_potential=self.M1,
+            p=p1,
+            q=q1,
+            dt=dt,
+            initial_adopters=initial_L1,
+        )
         self.l2_model = BassDiffusionModel(
             market_potential=self.M2,
             p=p2,
@@ -135,71 +158,98 @@ class MultiLevelAutomationDiffusion:
             dt=dt,
             initial_adopters=initial_L3,
         )
-        self.l45_model = BassDiffusionModel(
-            market_potential=self.M45,
-            p=p45,
-            q=q45,
+        self.l4_model = BassDiffusionModel(
+            market_potential=self.M4,
+            p=p4,
+            q=q4,
             dt=dt,
-            initial_adopters=initial_L45,
+            initial_adopters=initial_L4,
+        )
+        self.l5_model = BassDiffusionModel(
+            market_potential=self.M5,
+            p=p5,
+            q=q5,
+            dt=dt,
+            initial_adopters=initial_L5,
         )
 
         # Initialize history tracking for each level
         self.t = 0.0
         self.history_time = [self.t]
+        self.history_L1 = [initial_L1]
         self.history_L2 = [initial_L2]
         self.history_L3 = [initial_L3]
-        self.history_L45 = [initial_L45]
+        self.history_L4 = [initial_L4]
+        self.history_L5 = [initial_L5]
 
     def step(self):
         """
         Advance all diffusion models by one time step with hierarchical constraint enforcement.
 
-        Enforces: L45 <= L3 <= L2 <= min(M2, total_fleet)
+        Enforces: L5 <= L4 <= L3 <= L2 <= L1 <= min(M1, total_fleet)
         """
         # Advance each Bass process independently first
+        self.l1_model.step()
         self.l2_model.step()
         self.l3_model.step()
-        self.l45_model.step()
+        self.l4_model.step()
+        self.l5_model.step()
 
         # Get unconstrained adoption counts from Bass models
+        N1_unconstrained = self.l1_model.N
         N2_unconstrained = self.l2_model.N
         N3_unconstrained = self.l3_model.N
-        N45_unconstrained = self.l45_model.N
+        N4_unconstrained = self.l4_model.N
+        N5_unconstrained = self.l5_model.N
 
-        # Apply hierarchical constraints from top-down
-        # L2 cannot exceed total fleet or its market potential
-        N2 = min(N2_unconstrained, self.total_fleet, self.M2)
+        # Apply hierarchical constraints from bottom-up (L1 first, then L2, etc.)
+        # L1 cannot exceed total fleet or its market potential
+        N1 = min(N1_unconstrained, self.total_fleet, self.M1)
+
+        # L2 cannot exceed L1 or its market potential
+        N2 = min(N2_unconstrained, N1, self.M2)
 
         # L3 cannot exceed L2 or its market potential
         N3 = min(N3_unconstrained, N2, self.M3)
 
-        # L45 cannot exceed L3 or its market potential
-        N45 = min(N45_unconstrained, N3, self.M45)
+        # L4 cannot exceed L3 or its market potential
+        N4 = min(N4_unconstrained, N3, self.M4)
+
+        # L5 cannot exceed L4 or its market potential
+        N5 = min(N5_unconstrained, N4, self.M5)
 
         # Enforce non-negativity
+        N1 = max(N1, 0.0)
         N2 = max(N2, 0.0)
         N3 = max(N3, 0.0)
-        N45 = max(N45, 0.0)
+        N4 = max(N4, 0.0)
+        N5 = max(N5, 0.0)
 
         # Enforce non-decreasing property (adoption cannot go backwards)
-        if len(self.history_L2) > 0:
+        if len(self.history_L1) > 0:
+            N1 = max(N1, self.history_L1[-1])
             N2 = max(N2, self.history_L2[-1])
             N3 = max(N3, self.history_L3[-1])
-            N45 = max(N45, self.history_L45[-1])
+            N4 = max(N4, self.history_L4[-1])
+            N5 = max(N5, self.history_L5[-1])
 
         # Update time
         self.t += self.dt
 
         # Update the internal state of Bass models to match constrained values
+        self.l1_model.N = N1
         self.l2_model.N = N2
         self.l3_model.N = N3
-        self.l45_model.N = N45
+        self.l4_model.N = N4
+        self.l5_model.N = N5
 
         # Record history
         self.history_time.append(self.t)
+        self.history_L1.append(N1)
         self.history_L2.append(N2)
         self.history_L3.append(N3)
-        self.history_L45.append(N45)
+        self.history_L4.append(N4)
+        self.history_L5.append(N5)
 
     def run(self, steps: int):
         """Run the simulation for a specified number of time steps."""
