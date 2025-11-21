@@ -1,0 +1,62 @@
+================================================================================
+INLAND SHIPPING ABM - VISUALIZATION QUICK START
+================================================================================
+
+To see your vessels moving in real-time with interactive visualization:
+
+OPTION 1 (Windows - Easiest):
+  Double-click: run_visualization.bat
+
+OPTION 2 (Command line):
+  solara run app.py
+
+OPTION 3 (Just run simulation, no visualization):
+  python -m examples.run_basic_sim
+
+================================================================================
+
+After starting the visualization:
+
+1. Browser opens automatically at http://localhost:8765
+2. You'll see:
+   - Waterway canvas with moving vessels (colored arrows)
+   - Control panel on the left
+   - Safety metrics on the right
+   - Time-series plots at the bottom
+
+3. Controls:
+   - Click "Start" to begin simulation
+   - Use sliders to change vessel count
+   - Select different fleet compositions
+   - Watch collision rates change!
+
+4. Color Legend:
+   - RED vessels = L0 (Manual, 500m detection)
+   - ORANGE vessels = L1 (Steering assist, 750m detection)
+   - YELLOW vessels = L2 (Partial automation, 1000m detection)
+   - GREEN vessels = L3 (Conditional automation, 1200m detection)
+
+================================================================================
+
+Expected Results:
+  - All Manual Fleet: ~5.6% collision rate, ~255m avg distance
+  - Mixed Fleet: ~3.9% collision rate, ~400m avg distance
+  - High Automation: ~3.1% collision rate, ~500m avg distance
+
+Key Finding: More automation = Better safety! ✓
+
+================================================================================
+
+Need Help?
+  - Full guide: VISUALIZATION.md
+  - Model details: README_ABM.md
+  - Code: src/models/simple_abm.py
+
+Troubleshooting:
+  - If visualization won't start: pip install solara
+  - If modules not found: pip install mesa
+  - Press Ctrl+C to stop the server
+
+================================================================================
+
+Have fun exploring! 🚢
