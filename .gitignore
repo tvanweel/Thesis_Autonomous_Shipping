@@ -20,7 +20,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-.claude/
+
 
 # Virtual Environment
 venv/
@@ -73,3 +73,6 @@ htmlcov/
 # Configuration (if contains sensitive info)
 config/local_*.yaml
 *.secret
+
+# Claude Code temporary files
+.claude/".claude/" 
