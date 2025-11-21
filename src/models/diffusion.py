@@ -70,25 +70,28 @@ class BassDiffusionModel:
 
 class MultiLevelAutomationDiffusion:
     """
-    Models adoption of maritime automation levels with hierarchical constraints.
+    Models adoption of maritime automation levels as mutually exclusive categories.
 
-    Each automation level (L1-L5) has its own Bass diffusion model based on CCNR definitions:
-    - L0: Manual operation (baseline, implicit non-adopters)
+    Each automation level (L0-L5) represents a DISTINCT automation capability
+    based on CCNR definitions. Vessels belong to exactly ONE level:
+    - L0: Manual operation (no automation)
     - L1: Steering assistance (track pilot with basic automation)
     - L2: Partial automation (track pilot + propulsion control)
     - L3: Conditional automation (with collision avoidance systems)
     - L4: High automation (advanced autonomous capabilities)
     - L5: Full automation (fully autonomous vessels)
 
-    Hierarchical constraints enforce that higher automation levels can only exist
-    if the vessel has adopted the lower levels:
-    - L5 <= L4 <= L3 <= L2 <= L1 <= total_fleet
-    - Each level constrained by its market potential
+    Key constraint: L0 + L1 + L2 + L3 + L4 + L5 = total_fleet (always)
+
+    Each level has its own Bass diffusion model with independent adoption dynamics.
+    Market potentials represent the maximum number of vessels that could adopt
+    each specific level, and their sum can equal the total fleet.
 
     Real-world context (as of model initialization):
     - Total fleet: ~10,000 vessels in European inland shipping
+    - L0: ~9,100 vessels (manual operation, majority of fleet)
     - L1+L2: ~900 vessels with track pilot systems (initial adopters)
-    - L3-L5: Not yet implemented (0 vessels, technologies in development)
+    - L3-L5: 0 vessels (technologies still in development)
     """
 
     def __init__(
@@ -184,11 +187,13 @@ class MultiLevelAutomationDiffusion:
 
     def step(self):
         """
-        Advance all diffusion models by one time step with hierarchical constraint enforcement.
+        Advance all diffusion models by one time step.
 
-        Enforces: L5 <= L4 <= L3 <= L2 <= L1 <= min(M1, total_fleet)
+        Each level evolves independently according to its Bass diffusion dynamics.
+        The only constraint is that total adoption across all levels cannot exceed
+        the total fleet: L1 + L2 + L3 + L4 + L5 <= total_fleet
         """
-        # Advance each Bass process independently first
+        # Advance each Bass process independently
         self.l1_model.step()
         self.l2_model.step()
         self.l3_model.step()
@@ -202,21 +207,23 @@ class MultiLevelAutomationDiffusion:
         N4_unconstrained = self.l4_model.N
         N5_unconstrained = self.l5_model.N
 
-        # Apply hierarchical constraints from bottom-up (L1 first, then L2, etc.)
-        # L1 cannot exceed total fleet or its market potential
-        N1 = min(N1_unconstrained, self.total_fleet, self.M1)
+        # Apply market potential constraints (each level capped by its own M)
+        N1 = min(N1_unconstrained, self.M1)
+        N2 = min(N2_unconstrained, self.M2)
+        N3 = min(N3_unconstrained, self.M3)
+        N4 = min(N4_unconstrained, self.M4)
+        N5 = min(N5_unconstrained, self.M5)
 
-        # L2 cannot exceed L1 or its market potential
-        N2 = min(N2_unconstrained, N1, self.M2)
-
-        # L3 cannot exceed L2 or its market potential
-        N3 = min(N3_unconstrained, N2, self.M3)
-
-        # L4 cannot exceed L3 or its market potential
-        N4 = min(N4_unconstrained, N3, self.M4)
-
-        # L5 cannot exceed L4 or its market potential
-        N5 = min(N5_unconstrained, N4, self.M5)
+        # Apply fleet constraint: total adoption cannot exceed fleet size
+        total_adopted = N1 + N2 + N3 + N4 + N5
+        if total_adopted > self.total_fleet:
+            # Proportionally scale down all levels to fit within fleet
+            scale_factor = self.total_fleet / total_adopted
+            N1 *= scale_factor
+            N2 *= scale_factor
+            N3 *= scale_factor
+            N4 *= scale_factor
+            N5 *= scale_factor
 
         # Enforce non-negativity
         N1 = max(N1, 0.0)

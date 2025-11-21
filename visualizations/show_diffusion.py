@@ -46,9 +46,21 @@ def run_model_from_config(config: DiffusionConfig) -> MultiLevelAutomationDiffus
 
 
 def calculate_L0(model: MultiLevelAutomationDiffusion) -> np.ndarray:
-    """Calculate L0 (manual/non-adopters) vessels over time."""
+    """
+    Calculate L0 (manual/non-adopters) vessels over time.
+
+    In the mutually exclusive model, L0 represents vessels that have not adopted
+    any automation level (L1-L5). Since each vessel belongs to exactly ONE level
+    (L0, L1, L2, L3, L4, or L5), we calculate:
+        L0 = total_fleet - (L1 + L2 + L3 + L4 + L5)
+    """
+    total_fleet = model.total_fleet
     L1 = np.array(model.history_L1)
-    return model.total_fleet - L1
+    L2 = np.array(model.history_L2)
+    L3 = np.array(model.history_L3)
+    L4 = np.array(model.history_L4)
+    L5 = np.array(model.history_L5)
+    return total_fleet - (L1 + L2 + L3 + L4 + L5)
 
 
 def plot_1_multilevel_adoption_curves(config: DiffusionConfig, save_path: Path):
@@ -79,11 +91,10 @@ def plot_1_multilevel_adoption_curves(config: DiffusionConfig, save_path: Path):
 
     ax.set_xlabel("Time (years)", fontsize=12)
     ax.set_ylabel("Number of Vessels", fontsize=12)
-    ax.set_title(
-        f"Automation Adoption in Inland Shipping ({config.scenario_name.capitalize()} Scenario)",
-        fontsize=14,
-        fontweight="bold",
-    )
+
+    title = f"Automation Adoption in Inland Shipping ({config.scenario_name.capitalize()} Scenario)"
+    ax.set_title(title, fontsize=14, fontweight="bold")
+
     ax.legend(loc="best", fontsize=10)
     ax.grid(True, alpha=0.3)
 
@@ -164,54 +175,57 @@ def plot_3_market_share_evolution(config: DiffusionConfig, save_path: Path):
     L4 = np.array(model.history_L4)
     L5 = np.array(model.history_L5)
 
-    # Calculate market shares (percentage)
+    # Calculate market shares (percentage) for mutually exclusive levels
+    # In the mutually exclusive model, each level is independent, so shares are:
+    # L0, L1, L2, L3, L4, L5 (not L1-L2, L2-L3, etc.)
     total = model.total_fleet
     share_L0 = (L0 / total) * 100
-    share_L1_only = ((L1 - L2) / total) * 100
-    share_L2_only = ((L2 - L3) / total) * 100
-    share_L3_only = ((L3 - L4) / total) * 100
-    share_L4_only = ((L4 - L5) / total) * 100
+    share_L1 = (L1 / total) * 100
+    share_L2 = (L2 / total) * 100
+    share_L3 = (L3 / total) * 100
+    share_L4 = (L4 / total) * 100
     share_L5 = (L5 / total) * 100
 
     fig, ax = plt.subplots(figsize=(12, 7))
 
+    # Stack the areas for mutually exclusive levels
     ax.fill_between(t, 0, share_L0, label="L0 - Manual", color=COLORS["L0"], alpha=0.8)
     ax.fill_between(
         t,
         share_L0,
-        share_L0 + share_L1_only,
+        share_L0 + share_L1,
         label="L1 - Steering Assistance",
         color=COLORS["L1"],
         alpha=0.8,
     )
     ax.fill_between(
         t,
-        share_L0 + share_L1_only,
-        share_L0 + share_L1_only + share_L2_only,
+        share_L0 + share_L1,
+        share_L0 + share_L1 + share_L2,
         label="L2 - Partial Automation",
         color=COLORS["L2"],
         alpha=0.8,
     )
     ax.fill_between(
         t,
-        share_L0 + share_L1_only + share_L2_only,
-        share_L0 + share_L1_only + share_L2_only + share_L3_only,
+        share_L0 + share_L1 + share_L2,
+        share_L0 + share_L1 + share_L2 + share_L3,
         label="L3 - Conditional Automation",
         color=COLORS["L3"],
         alpha=0.8,
     )
     ax.fill_between(
         t,
-        share_L0 + share_L1_only + share_L2_only + share_L3_only,
-        share_L0 + share_L1_only + share_L2_only + share_L3_only + share_L4_only,
+        share_L0 + share_L1 + share_L2 + share_L3,
+        share_L0 + share_L1 + share_L2 + share_L3 + share_L4,
         label="L4 - High Automation",
         color=COLORS["L4"],
         alpha=0.8,
     )
     ax.fill_between(
         t,
-        share_L0 + share_L1_only + share_L2_only + share_L3_only + share_L4_only,
-        100,
+        share_L0 + share_L1 + share_L2 + share_L3 + share_L4,
+        share_L0 + share_L1 + share_L2 + share_L3 + share_L4 + share_L5,
         label="L5 - Full Automation",
         color=COLORS["L5"],
         alpha=0.8,

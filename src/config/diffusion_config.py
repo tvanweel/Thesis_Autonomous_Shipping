@@ -80,6 +80,48 @@ class DiffusionConfig:
         self.dt = dt
         self.scenario_name = scenario_name
 
+        # Validate that market potentials respect hierarchical constraints
+        self._validate_market_potentials()
+
+    def _validate_market_potentials(self):
+        """
+        Validate that market potentials respect fleet constraints.
+
+        Since automation levels are mutually exclusive (each vessel belongs to ONE level),
+        the sum of all market potentials should not significantly exceed the total fleet.
+        Some overlap is allowed as market potentials represent maximum potential adoption,
+        but excessive overlap would be unrealistic.
+
+        Raises:
+            ValueError: If market potential constraints are violated.
+        """
+        # Check that each individual level doesn't exceed total fleet
+        for level_num, level_params in [(1, self.L1), (2, self.L2), (3, self.L3), (4, self.L4), (5, self.L5)]:
+            if level_params.market_potential > self.total_fleet:
+                raise ValueError(
+                    f"L{level_num} market potential ({level_params.market_potential}) cannot exceed "
+                    f"total fleet ({self.total_fleet}). "
+                    f"A single level cannot have more potential adopters than the entire fleet."
+                )
+
+        # Check that sum of market potentials is reasonable
+        # Allow up to 2x fleet size (some competition between levels is realistic)
+        total_market_potential = (
+            self.L1.market_potential +
+            self.L2.market_potential +
+            self.L3.market_potential +
+            self.L4.market_potential +
+            self.L5.market_potential
+        )
+
+        if total_market_potential > 2 * self.total_fleet:
+            raise ValueError(
+                f"Sum of market potentials ({total_market_potential}) is unrealistically high "
+                f"({total_market_potential/self.total_fleet:.1f}x fleet size). "
+                f"Since levels are mutually exclusive, the sum should not exceed ~2x the fleet size. "
+                f"Consider reducing market potentials to reflect realistic adoption scenarios."
+            )
+
     def to_model_params(self) -> Dict[str, Any]:
         """
         Convert configuration to parameters for MultiLevelAutomationDiffusion.
@@ -117,43 +159,44 @@ class DiffusionConfig:
         """
         Baseline scenario with moderate adoption rates.
 
-        Assumptions:
-        - Total fleet: 10,000 vessels
-        - L1+L2 combined have ~900 initial adopters (existing track pilot systems)
-        - L3-L5 start at 0 (technologies still in development)
-        - Market potentials reflect realistic adoption constraints
-        - Innovation coefficients (p) decrease for higher levels (more barriers)
-        - Imitation coefficients (q) vary based on observable benefits
+        Assumptions (Mutually Exclusive Levels):
+        - Total fleet: 10,000 vessels (fixed)
+        - Each vessel adopts EXACTLY ONE automation level
+        - L0 (manual): Majority of fleet starts here
+        - L1+L2: ~900 initial adopters (existing track pilot systems)
+        - L3-L5: 0 initial adopters (technologies still in development)
+        - Market potentials represent maximum vessels that could adopt each specific level
+        - Sum of market potentials ≈ fleet size (levels compete for same vessels)
         """
         return cls(
             total_fleet=10000,
             L1=LevelParameters(
-                initial_adopters=450,  # Half of existing track pilot systems
-                market_potential=7000,  # Most vessels could adopt basic automation
+                initial_adopters=450,  # Basic automation (track pilot)
+                market_potential=3000,  # 30% could adopt basic level
                 innovation_coefficient=0.035,  # Moderate early adoption
                 imitation_coefficient=0.45,  # Strong word-of-mouth for proven tech
             ),
             L2=LevelParameters(
-                initial_adopters=450,  # Other half of existing systems
-                market_potential=6000,  # Slightly lower (more requirements)
+                initial_adopters=450,  # Partial automation
+                market_potential=3500,  # 35% could adopt partial automation
                 innovation_coefficient=0.030,  # Slightly lower than L1
                 imitation_coefficient=0.40,  # Still strong imitation
             ),
             L3=LevelParameters(
-                initial_adopters=0,  # Still in development
-                market_potential=3000,  # Significant barrier (collision avoidance)
+                initial_adopters=0,  # Conditional automation (still in development)
+                market_potential=2000,  # 20% for conditional automation
                 innovation_coefficient=0.020,  # Lower (more complex, expensive)
                 imitation_coefficient=0.30,  # Moderate imitation
             ),
             L4=LevelParameters(
-                initial_adopters=0,  # Not yet available
-                market_potential=1200,  # High barriers (technical, regulatory)
+                initial_adopters=0,  # High automation (not yet available)
+                market_potential=1000,  # 10% for high automation
                 innovation_coefficient=0.012,  # Low early adoption
                 imitation_coefficient=0.22,  # Lower imitation (niche use cases)
             ),
             L5=LevelParameters(
-                initial_adopters=0,  # Future technology
-                market_potential=500,  # Very limited (full autonomy challenges)
+                initial_adopters=0,  # Full automation (future technology)
+                market_potential=500,  # 5% for full autonomy
                 innovation_coefficient=0.008,  # Very low early adoption
                 imitation_coefficient=0.15,  # Limited imitation (high risk perception)
             ),
@@ -165,44 +208,46 @@ class DiffusionConfig:
     @classmethod
     def optimistic(cls) -> "DiffusionConfig":
         """
-        Optimistic scenario with faster adoption and higher market potentials.
+        Optimistic scenario with faster adoption and shift toward higher automation levels.
 
-        Assumptions:
+        Assumptions (Mutually Exclusive Levels):
+        - Total fleet: 10,000 vessels (fixed)
         - Favorable regulatory environment
         - Rapid technological development
         - Strong economic incentives for automation
-        - Higher market acceptance
+        - Higher market acceptance, especially for advanced levels
         - Faster technology diffusion
+        - Market shifts toward L3-L5 (higher automation preferred)
         """
         return cls(
             total_fleet=10000,
             L1=LevelParameters(
                 initial_adopters=450,
-                market_potential=8500,  # +21% vs baseline
+                market_potential=2000,  # 20% stay at basic level (lower than baseline)
                 innovation_coefficient=0.045,  # +29% vs baseline
                 imitation_coefficient=0.55,  # +22% vs baseline
             ),
             L2=LevelParameters(
                 initial_adopters=450,
-                market_potential=7500,  # +25% vs baseline
+                market_potential=2500,  # 25% at partial automation
                 innovation_coefficient=0.040,  # +33% vs baseline
                 imitation_coefficient=0.50,  # +25% vs baseline
             ),
             L3=LevelParameters(
                 initial_adopters=0,
-                market_potential=4500,  # +50% vs baseline
+                market_potential=3000,  # 30% for conditional automation (higher than baseline)
                 innovation_coefficient=0.030,  # +50% vs baseline
                 imitation_coefficient=0.42,  # +40% vs baseline
             ),
             L4=LevelParameters(
                 initial_adopters=0,
-                market_potential=2000,  # +67% vs baseline
+                market_potential=1500,  # 15% for high automation
                 innovation_coefficient=0.020,  # +67% vs baseline
                 imitation_coefficient=0.32,  # +45% vs baseline
             ),
             L5=LevelParameters(
                 initial_adopters=0,
-                market_potential=1000,  # +100% vs baseline
+                market_potential=1000,  # 10% for full autonomy (2x baseline)
                 innovation_coefficient=0.015,  # +88% vs baseline
                 imitation_coefficient=0.25,  # +67% vs baseline
             ),
@@ -214,44 +259,46 @@ class DiffusionConfig:
     @classmethod
     def pessimistic(cls) -> "DiffusionConfig":
         """
-        Pessimistic scenario with slower adoption and lower market potentials.
+        Pessimistic scenario with slower adoption and concentration at lower automation levels.
 
-        Assumptions:
+        Assumptions (Mutually Exclusive Levels):
+        - Total fleet: 10,000 vessels (fixed)
         - Regulatory barriers and uncertainty
         - Slower technological development
         - Economic challenges (high costs, unclear ROI)
         - Market resistance and safety concerns
         - Slower technology diffusion
+        - Most fleet remains at L0-L2 (basic/manual operation)
         """
         return cls(
             total_fleet=10000,
             L1=LevelParameters(
                 initial_adopters=450,
-                market_potential=5500,  # -21% vs baseline
+                market_potential=4000,  # 40% at basic level (higher than baseline)
                 innovation_coefficient=0.025,  # -29% vs baseline
                 imitation_coefficient=0.35,  # -22% vs baseline
             ),
             L2=LevelParameters(
                 initial_adopters=450,
-                market_potential=4500,  # -25% vs baseline
+                market_potential=4000,  # 40% at partial automation
                 innovation_coefficient=0.022,  # -27% vs baseline
                 imitation_coefficient=0.30,  # -25% vs baseline
             ),
             L3=LevelParameters(
                 initial_adopters=0,
-                market_potential=1800,  # -40% vs baseline
+                market_potential=1500,  # 15% for conditional automation (lower than baseline)
                 innovation_coefficient=0.012,  # -40% vs baseline
                 imitation_coefficient=0.20,  # -33% vs baseline
             ),
             L4=LevelParameters(
                 initial_adopters=0,
-                market_potential=600,  # -50% vs baseline
+                market_potential=400,  # 4% for high automation
                 innovation_coefficient=0.007,  # -42% vs baseline
                 imitation_coefficient=0.14,  # -36% vs baseline
             ),
             L5=LevelParameters(
                 initial_adopters=0,
-                market_potential=200,  # -60% vs baseline
+                market_potential=100,  # 1% for full autonomy (very limited)
                 innovation_coefficient=0.004,  # -50% vs baseline
                 imitation_coefficient=0.08,  # -47% vs baseline
             ),
@@ -291,7 +338,7 @@ class DiffusionConfig:
         lines = [
             f"Diffusion Model Configuration - {self.scenario_name.upper()} Scenario",
             "=" * 70,
-            f"Total Fleet: {self.total_fleet} vessels",
+            f"Fleet Size: {self.total_fleet} vessels (fixed)",
             f"Time Horizon: {self.time_horizon} years (dt={self.dt})",
             "",
             "Automation Levels (CCNR Definitions):",

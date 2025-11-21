@@ -2,6 +2,8 @@ import numpy as np
 import pytest
 
 from src.models.diffusion import BassDiffusionModel, MultiLevelAutomationDiffusion
+from src.config import DiffusionConfig
+from src.config.diffusion_config import LevelParameters
 
 
 # --------- BassDiffusionModel tests --------- #
@@ -145,11 +147,11 @@ def _build_multilevel_model():
         initial_L3=0,
         initial_L4=0,
         initial_L5=0,
-        M1=7000,
-        M2=6000,
-        M3=3000,
-        M4=1200,
-        M5=500,
+        M1=7000,  # 70% of fleet
+        M2=5500,  # 55% of fleet
+        M3=3000,  # 30% of fleet
+        M4=1000,  # 10% of fleet
+        M5=300,   # 3% of fleet
         p1=0.035, q1=0.45,
         p2=0.030, q2=0.40,
         p3=0.020, q3=0.30,
@@ -222,10 +224,10 @@ def test_multilevel_respects_market_potentials():
 
     # These correspond to the M1-M5 used in _build_multilevel_model
     assert np.all(L1 <= 7000 + 1e-9)
-    assert np.all(L2 <= 6000 + 1e-9)
+    assert np.all(L2 <= 5500 + 1e-9)
     assert np.all(L3 <= 3000 + 1e-9)
-    assert np.all(L4 <= 1200 + 1e-9)
-    assert np.all(L5 <= 500 + 1e-9)
+    assert np.all(L4 <= 1000 + 1e-9)
+    assert np.all(L5 <= 300 + 1e-9)
 
 
 def test_multilevel_no_growth_if_all_pq_zero():
@@ -238,10 +240,10 @@ def test_multilevel_no_growth_if_all_pq_zero():
         initial_L4=0,
         initial_L5=0,
         M1=7000,
-        M2=6000,
+        M2=5500,
         M3=3000,
-        M4=1200,
-        M5=500,
+        M4=1000,
+        M5=300,
         p1=0.0, q1=0.0,
         p2=0.0, q2=0.0,
         p3=0.0, q3=0.0,
@@ -265,24 +267,28 @@ def test_multilevel_no_growth_if_all_pq_zero():
     assert np.allclose(L5, 0.0)
 
 
-def test_multilevel_hierarchy_constraint_enforced_during_growth():
+def test_multilevel_independent_level_growth():
     """
-    Test that hierarchy constraints are enforced even when higher levels
-    have stronger growth parameters than lower levels.
+    Test that levels can grow independently in the mutually exclusive model.
+
+    In the mutually exclusive paradigm, levels are independent categories competing
+    for vessels from the same fleet. Higher levels can have more adopters than lower
+    levels if they have stronger growth parameters, unlike the old hierarchical model.
     """
     model = MultiLevelAutomationDiffusion(
         total_fleet=1000,
-        initial_L1=100,
-        initial_L2=80,
+        initial_L1=50,
+        initial_L2=50,
         initial_L3=50,
-        initial_L4=20,
-        initial_L5=10,
-        M1=500,
-        M2=450,
-        M3=400,
-        M4=350,
-        M5=300,
-        # Give higher levels stronger growth (counterintuitive scenario)
+        initial_L4=50,
+        initial_L5=50,
+        # Mutually exclusive market potentials that sum to fleet size
+        M1=150,
+        M2=200,
+        M3=250,
+        M4=200,
+        M5=200,
+        # Give higher levels stronger growth parameters
         p1=0.01, q1=0.1,
         p2=0.02, q2=0.2,
         p3=0.05, q3=0.4,
@@ -291,7 +297,7 @@ def test_multilevel_hierarchy_constraint_enforced_during_growth():
         dt=1.0,
     )
 
-    model.run(steps=50)
+    model.run(steps=30)
 
     L1 = np.array(model.history_L1)
     L2 = np.array(model.history_L2)
@@ -299,11 +305,14 @@ def test_multilevel_hierarchy_constraint_enforced_during_growth():
     L4 = np.array(model.history_L4)
     L5 = np.array(model.history_L5)
 
-    # Despite higher levels having stronger growth parameters, hierarchy should be enforced
-    assert np.all(L2 <= L1 + 1e-9)
-    assert np.all(L3 <= L2 + 1e-9)
-    assert np.all(L4 <= L3 + 1e-9)
-    assert np.all(L5 <= L4 + 1e-9)
+    # In mutually exclusive model, higher levels CAN exceed lower levels
+    # Total fleet constraint should still be respected
+    total_adopted = L1 + L2 + L3 + L4 + L5
+    assert np.all(total_adopted <= 1000 + 1e-6)
+
+    # Levels should grow independently - L5 should have most adopters at the end
+    # due to strongest growth parameters
+    assert L5[-1] > L1[-1]
 
 
 def test_multilevel_initial_values_respect_hierarchy():
@@ -404,9 +413,12 @@ def test_multilevel_saturation_behavior():
     assert L5[-1] == pytest.approx(150, rel=0.01)
 
 
-def test_multilevel_constrained_by_lower_level():
+def test_multilevel_fleet_constraint_with_competing_levels():
     """
-    Test scenario where higher levels want to grow beyond lower levels but are constrained.
+    Test that the fleet constraint is enforced when levels compete for adoption.
+
+    In the mutually exclusive model, levels grow independently but the total
+    adoption across all levels is constrained by the total fleet size.
     """
     model = MultiLevelAutomationDiffusion(
         total_fleet=1000,
@@ -415,16 +427,18 @@ def test_multilevel_constrained_by_lower_level():
         initial_L3=90,
         initial_L4=85,
         initial_L5=80,
-        M1=150,  # L1 can only grow to 150
-        M2=200,  # L2 has potential but constrained by L1
-        M3=500,  # L3 has high potential but constrained by L2
-        M4=400,  # L4 has potential but constrained by L3
-        M5=300,  # L5 has potential but constrained by L4
-        p1=0.01, q1=0.1,   # Slow growth for L1
-        p2=0.03, q2=0.2,   # Faster growth for L2
-        p3=0.1, q3=0.5,    # Fast growth for L3
-        p4=0.08, q4=0.4,   # Fast growth for L4
-        p5=0.06, q5=0.3,   # Fast growth for L5
+        # Market potentials that sum to more than fleet (competition scenario)
+        M1=300,
+        M2=350,
+        M3=400,
+        M4=300,
+        M5=250,
+        # Different growth parameters for each level
+        p1=0.01, q1=0.1,
+        p2=0.03, q2=0.2,
+        p3=0.1, q3=0.5,
+        p4=0.08, q4=0.4,
+        p5=0.06, q5=0.3,
         dt=1.0,
     )
 
@@ -436,11 +450,16 @@ def test_multilevel_constrained_by_lower_level():
     L4 = np.array(model.history_L4)
     L5 = np.array(model.history_L5)
 
-    # Higher levels should never exceed lower levels despite having higher growth potential
-    assert np.all(L2 <= L1 + 1e-9)
-    assert np.all(L3 <= L2 + 1e-9)
-    assert np.all(L4 <= L3 + 1e-9)
-    assert np.all(L5 <= L4 + 1e-9)
+    # Total adoption should never exceed fleet size (allow small numerical tolerance)
+    total_adopted = L1 + L2 + L3 + L4 + L5
+    assert np.all(total_adopted <= 1000 * 1.01)  # 1% tolerance for numerical precision
+
+    # Each level should be bounded by its market potential (allow small numerical tolerance)
+    assert np.all(L1 <= 300 * 1.01)
+    assert np.all(L2 <= 350 * 1.01)
+    assert np.all(L3 <= 400 * 1.01)
+    assert np.all(L4 <= 300 * 1.01)
+    assert np.all(L5 <= 250 * 1.01)
 
 
 def test_multilevel_different_timesteps():
@@ -453,10 +472,11 @@ def test_multilevel_different_timesteps():
         initial_L3=0,
         initial_L4=0,
         initial_L5=0,
-        M1=7000,
-        M2=6000,
-        M3=3000,
-        M4=1200,
+        # Use realistic market potentials that sum to fleet size (mutually exclusive)
+        M1=3000,
+        M2=3500,
+        M3=2000,
+        M4=1000,
         M5=500,
         p1=0.035, q1=0.45,
         p2=0.030, q2=0.40,
@@ -475,10 +495,11 @@ def test_multilevel_different_timesteps():
         initial_L3=0,
         initial_L4=0,
         initial_L5=0,
-        M1=7000,
-        M2=6000,
-        M3=3000,
-        M4=1200,
+        # Use realistic market potentials that sum to fleet size (mutually exclusive)
+        M1=3000,
+        M2=3500,
+        M3=2000,
+        M4=1000,
         M5=500,
         p1=0.035, q1=0.45,
         p2=0.030, q2=0.40,
@@ -510,3 +531,70 @@ def test_multilevel_time_tracking():
     assert model.t == pytest.approx(expected_final_time)
     assert len(model.history_time) == steps + 1  # Initial + steps
     assert model.history_time[-1] == pytest.approx(expected_final_time)
+
+
+# --------- DiffusionConfig Validation tests (Mutually Exclusive Levels) --------- #
+
+def test_config_validates_individual_level_exceeds_fleet():
+    """Configuration should reject any individual level exceeding total fleet."""
+    with pytest.raises(ValueError, match="L3 market potential.*cannot exceed.*total fleet"):
+        DiffusionConfig(
+            total_fleet=10000,
+            L1=LevelParameters(initial_adopters=100, market_potential=3000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L2=LevelParameters(initial_adopters=50, market_potential=3000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L3=LevelParameters(initial_adopters=0, market_potential=15000, innovation_coefficient=0.01, imitation_coefficient=0.1),  # Exceeds fleet!
+            L4=LevelParameters(initial_adopters=0, market_potential=1000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L5=LevelParameters(initial_adopters=0, market_potential=500, innovation_coefficient=0.01, imitation_coefficient=0.1),
+        )
+
+
+def test_config_validates_total_market_potential_too_high():
+    """Configuration should reject unrealistically high sum of market potentials."""
+    with pytest.raises(ValueError, match="Sum of market potentials.*unrealistically high"):
+        DiffusionConfig(
+            total_fleet=10000,
+            L1=LevelParameters(initial_adopters=100, market_potential=8000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L2=LevelParameters(initial_adopters=50, market_potential=7000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L3=LevelParameters(initial_adopters=0, market_potential=6000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L4=LevelParameters(initial_adopters=0, market_potential=5000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            L5=LevelParameters(initial_adopters=0, market_potential=4000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+            # Sum = 30,000 (3x fleet) - unrealistic for mutually exclusive levels!
+        )
+
+
+def test_config_allows_reasonable_market_potential_overlap():
+    """Configuration should allow market potentials summing to ~1-2x fleet (realistic competition)."""
+    # This should NOT raise an exception
+    config = DiffusionConfig(
+        total_fleet=10000,
+        L1=LevelParameters(initial_adopters=100, market_potential=4000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+        L2=LevelParameters(initial_adopters=50, market_potential=4000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+        L3=LevelParameters(initial_adopters=0, market_potential=4000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+        L4=LevelParameters(initial_adopters=0, market_potential=3000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+        L5=LevelParameters(initial_adopters=0, market_potential=2000, innovation_coefficient=0.01, imitation_coefficient=0.1),
+        # Sum = 17,000 (1.7x fleet) - realistic competition between levels
+    )
+    assert config.total_fleet == 10000
+
+
+def test_config_validates_predefined_scenarios():
+    """All predefined scenarios should pass validation."""
+    # These should not raise any exceptions
+    baseline = DiffusionConfig.baseline()
+    optimistic = DiffusionConfig.optimistic()
+    pessimistic = DiffusionConfig.pessimistic()
+
+    # Verify they have expected structure
+    assert baseline.total_fleet == 10000
+    assert optimistic.total_fleet == 10000
+    assert pessimistic.total_fleet == 10000
+
+    # Verify sum of market potentials is reasonable (mutually exclusive levels)
+    def total_market_potential(config):
+        return (config.L1.market_potential + config.L2.market_potential +
+                config.L3.market_potential + config.L4.market_potential +
+                config.L5.market_potential)
+
+    assert total_market_potential(baseline) <= 2 * baseline.total_fleet
+    assert total_market_potential(optimistic) <= 2 * optimistic.total_fleet
+    assert total_market_potential(pessimistic) <= 2 * pessimistic.total_fleet

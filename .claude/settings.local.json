@@ -11,7 +11,8 @@
       "Bash(powershell -Command \"Measure-Command { & cmd /c ''exit'' } | Select-Object -ExpandProperty TotalMilliseconds\")",
       "Bash(powershell -Command \"Measure-Command { & cmd /c ''conda activate thesis_inland_shipping && exit'' } | Select-Object -ExpandProperty TotalMilliseconds\")",
       "Bash(python -m pytest:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(del show_market_potentials.py)"
     ],
     "deny": [],
     "ask": []
