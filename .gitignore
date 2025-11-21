@@ -72,3 +72,4 @@ htmlcov/
 # Configuration (if contains sensitive info)
 config/local_*.yaml
 *.secret
+".claude/" 
