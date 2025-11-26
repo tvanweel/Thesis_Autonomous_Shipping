@@ -1,10 +1,12 @@
 """
-Agent Demo - Random Ships Without Disruptions
+Agent Demo - Random Ships With Traffic Behavior
 
 Demonstrates a simulation with:
 - Randomly generated ships with random start/destination
 - Random automation levels (0-5)
-- Performance metrics (travel time, system time)
+- Realistic traffic behavior (congestion, crossroads)
+- Dynamic speed adjustment based on vessel density
+- Performance metrics (travel time, system time, waiting time)
 - CSV export of all ship data
 
 Usage:
@@ -24,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models.network import Network, Node, Edge
 from src.models.agent import Agent, AgentState, create_agent, reset_agent_id_counter
+from src.models.traffic import TrafficManager
 
 
 def create_rhine_network() -> Network:
@@ -106,7 +109,7 @@ def create_random_ships(
         # Random speed (10-18 km/h for inland vessels)
         speed = random.uniform(10.0, 18.0)
 
-        # Random RIS connectivity (higher automation -> higher chance of RIS)
+        # RIS connectivity (higher automation -> higher chance of RIS)
         # L0-L2: 20% chance, L3-L4: 60% chance, L5: 90% chance
         if automation_level <= 2:
             ris_connected = random.random() < 0.2
@@ -134,7 +137,6 @@ def create_random_ships(
             pass
 
     return ships
-
 
 def export_ships_to_csv(ships: List[Agent], metrics: dict, filename: str = None) -> str:
     """
@@ -167,18 +169,21 @@ def export_ships_to_csv(ships: List[Agent], metrics: dict, filename: str = None)
         writer.writerow([
             'ship_id',
             'automation_level',
-            'speed_kmh',
+            'base_speed_kmh',
             'ris_connected',
             'origin',
             'destination',
             'distance_km',
             'travel_time_hours',
+            'waiting_time_hours',
+            'total_time_hours',
             'state',
             'route'
         ])
 
         # Ship data
         for ship in ships:
+            total_time = ship.journey_time + ship.waiting_time
             writer.writerow([
                 ship.agent_id,
                 ship.automation_level,
@@ -188,6 +193,8 @@ def export_ships_to_csv(ships: List[Agent], metrics: dict, filename: str = None)
                 ship.destination,
                 f"{ship.journey_distance:.2f}",
                 f"{ship.journey_time:.2f}",
+                f"{ship.waiting_time:.2f}",
+                f"{total_time:.2f}",
                 ship.state.value,
                 ' -> '.join(ship.route)
             ])
@@ -226,13 +233,15 @@ def export_timeseries_to_csv(history: List[dict], filename: str = None) -> str:
             'step',
             'ship_id',
             'automation_level',
-            'speed_kmh',
+            'base_speed_kmh',
+            'effective_speed_kmh',
             'ris_connected',
             'current_node',
             'destination',
             'state',
             'distance_traveled_km',
             'time_elapsed_hours',
+            'waiting_time_hours',
             'next_node'
         ])
 
@@ -244,13 +253,15 @@ def export_timeseries_to_csv(history: List[dict], filename: str = None) -> str:
                     step,
                     ship_state['ship_id'],
                     ship_state['automation_level'],
-                    f"{ship_state['speed']:.2f}",
+                    f"{ship_state['base_speed']:.2f}",
+                    f"{ship_state['effective_speed']:.2f}",
                     ship_state['ris_connected'],
                     ship_state['current_node'],
                     ship_state['destination'],
                     ship_state['state'],
                     f"{ship_state['distance_traveled']:.2f}",
                     f"{ship_state['time_elapsed']:.2f}",
+                    f"{ship_state['waiting_time']:.2f}",
                     ship_state['next_node'] or ''
                 ])
 
@@ -263,7 +274,7 @@ def run_simulation(
     seed: int = None
 ) -> Tuple[List[Agent], dict, List[dict]]:
     """
-    Run the complete simulation without disruptions.
+    Run the complete simulation with realistic traffic behavior.
 
     Args:
         num_ships: Number of ships to simulate
@@ -283,15 +294,22 @@ def run_simulation(
     # Create ships
     ships = create_random_ships(num_ships, port_ids, network)
 
+    # Initialize traffic manager
+    traffic_mgr = TrafficManager(network)
+
     # Simulation metrics
     total_system_time = 0.0  # Total time all ships spend in system
     total_travel_time = 0.0  # Actual travel time
+    total_waiting_time = 0.0  # Total waiting time
 
     # Track when ships enter/exit
     ship_exit_step = {}
 
     # Track history for time series export
     history = []
+
+    # Track effective speeds for each ship at each step
+    ship_effective_speeds = {}
 
     # Run simulation
     step = 0
@@ -300,26 +318,8 @@ def run_simulation(
     while step < max_steps and active_ships:
         step += 1
 
-        # Capture state before step
-        step_snapshot = {
-            'step': step,
-            'ships': []
-        }
-
+        # Move all active ships
         for ship in ships:
-            step_snapshot['ships'].append({
-                'ship_id': ship.agent_id,
-                'automation_level': ship.automation_level,
-                'speed': ship.speed,
-                'ris_connected': ship.ris_connected,
-                'current_node': ship.current_node,
-                'destination': ship.destination,
-                'state': ship.state.value,
-                'distance_traveled': ship.journey_distance,
-                'time_elapsed': ship.journey_time,
-                'next_node': ship.next_node
-            })
-
             if ship.agent_id not in active_ships:
                 continue
 
@@ -327,6 +327,16 @@ def run_simulation(
             if ship.state == AgentState.TRAVELING and ship.next_node:
                 current = ship.current_node
                 next_node = ship.next_node
+
+                # Check crossroad entry (if arriving at next node)
+                can_enter, wait_time = traffic_mgr.check_crossroad_entry(ship.agent_id, next_node)
+
+                if not can_enter:
+                    # Must wait at crossroad
+                    ship.waiting_time += wait_time
+                    traffic_mgr.update_time(ship.journey_time + ship.waiting_time)
+                    ship_effective_speeds[ship.agent_id] = 0.0
+                    continue
 
                 # Get edge distance
                 try:
@@ -338,8 +348,17 @@ def run_simulation(
                 except:
                     edge_distance = 10.0
 
-                # Calculate travel time using ship's own speed
-                travel_time = edge_distance / ship.speed
+                # Register vessel entering edge
+                traffic_mgr.vessel_enter_edge(ship.agent_id, current, next_node)
+
+                # Calculate effective speed based on congestion
+                effective_speed = traffic_mgr.get_effective_speed(
+                    ship.agent_id, ship.speed, current, next_node
+                )
+                ship_effective_speeds[ship.agent_id] = effective_speed
+
+                # Calculate travel time using effective speed
+                travel_time = edge_distance / effective_speed
 
                 # Move agent
                 ship.advance_to_next_node(
@@ -347,10 +366,53 @@ def run_simulation(
                     time=travel_time
                 )
 
+                # Register vessel exiting previous edge
+                traffic_mgr.vessel_exit_edge(ship.agent_id, current, next_node)
+
+                # Occupy crossroad if arriving at one
+                if next_node in traffic_mgr.crossroads:
+                    traffic_mgr.occupy_crossroad(ship.agent_id, next_node)
+
+                # Release previous crossroad if leaving one
+                if current in traffic_mgr.crossroads:
+                    traffic_mgr.release_crossroad(ship.agent_id, current)
+
             # Check if ship reached destination
             if ship.is_at_destination and ship.agent_id in active_ships:
                 ship_exit_step[ship.agent_id] = step
                 active_ships.remove(ship.agent_id)
+
+                # Release crossroad if at one
+                if ship.current_node in traffic_mgr.crossroads:
+                    traffic_mgr.release_crossroad(ship.agent_id, ship.current_node)
+
+        # Update traffic manager time
+        if ships:
+            avg_time = sum(s.journey_time + s.waiting_time for s in ships) / len(ships)
+            traffic_mgr.update_time(avg_time)
+
+        # Capture state after all movements for this step
+        step_snapshot = {
+            'step': step,
+            'ships': []
+        }
+
+        for ship in ships:
+            eff_speed = ship_effective_speeds.get(ship.agent_id, ship.speed)
+            step_snapshot['ships'].append({
+                'ship_id': ship.agent_id,
+                'automation_level': ship.automation_level,
+                'base_speed': ship.speed,
+                'effective_speed': eff_speed,
+                'ris_connected': ship.ris_connected,
+                'current_node': ship.current_node,
+                'destination': ship.destination,
+                'state': ship.state.value,
+                'distance_traveled': ship.journey_distance,
+                'time_elapsed': ship.journey_time,
+                'waiting_time': ship.waiting_time,
+                'next_node': ship.next_node
+            })
 
         # Save step snapshot to history
         history.append(step_snapshot)
@@ -358,18 +420,21 @@ def run_simulation(
     # Calculate metrics
     for ship in ships:
         total_travel_time += ship.journey_time
+        total_waiting_time += ship.waiting_time
 
-        # System time = travel time (no waiting in this version)
+        # System time = travel time + waiting time
         if ship.agent_id in ship_exit_step:
-            total_system_time += ship.journey_time
+            total_system_time += (ship.journey_time + ship.waiting_time)
 
     metrics = {
         'num_ships': num_ships,
         'completed_journeys': len(ship_exit_step),
         'total_system_time': total_system_time,
         'total_travel_time': total_travel_time,
+        'total_waiting_time': total_waiting_time,
         'avg_system_time': total_system_time / len(ship_exit_step) if ship_exit_step else 0,
         'avg_travel_time': total_travel_time / len(ship_exit_step) if ship_exit_step else 0,
+        'avg_waiting_time': total_waiting_time / len(ship_exit_step) if ship_exit_step else 0,
         'simulation_steps': step,
     }
 
@@ -390,7 +455,7 @@ def main(
         interactive: Whether to prompt for user input
     """
     print("=" * 80)
-    print("AUTONOMOUS SHIPPING SIMULATION - NO DISRUPTIONS")
+    print("AUTONOMOUS SHIPPING SIMULATION - WITH TRAFFIC BEHAVIOR")
     print("=" * 80)
     print()
 
@@ -461,11 +526,13 @@ def main(
     print()
 
     print(f"Total travel time: {metrics['total_travel_time']:.2f} hours")
+    print(f"Total waiting time: {metrics['total_waiting_time']:.2f} hours")
     print(f"Total system time: {metrics['total_system_time']:.2f} hours")
     print()
 
     if metrics['completed_journeys'] > 0:
         print(f"Average travel time per ship: {metrics['avg_travel_time']:.2f} hours")
+        print(f"Average waiting time per ship: {metrics['avg_waiting_time']:.2f} hours")
         print(f"Average system time per ship: {metrics['avg_system_time']:.2f} hours")
 
     print()
@@ -477,11 +544,14 @@ def main(
     print()
 
     for ship in ships[:5]:
+        total_time = ship.journey_time + ship.waiting_time
         print(f"{ship.agent_id}:")
         print(f"  Route: {ship.origin} -> {ship.destination}")
         print(f"  Automation Level: L{ship.automation_level}")
         print(f"  Distance: {ship.journey_distance:.0f} km")
         print(f"  Travel time: {ship.journey_time:.2f} hours")
+        print(f"  Waiting time: {ship.waiting_time:.2f} hours")
+        print(f"  Total time: {total_time:.2f} hours")
         print(f"  State: {ship.state.value}")
         print()
 

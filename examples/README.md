@@ -18,15 +18,19 @@ A detailed walkthrough demonstration with manually configured ships:
 python examples/agent_demo.py
 ```
 
-### 2. Agent Demo (Random Configuration)
+### 2. Agent Demo (Random Configuration with Traffic Behavior)
 **File:** `agent_demo_random.py`
 
-Simulation with randomly generated ships:
+Simulation with randomly generated ships and realistic traffic behavior:
 - Configurable number of ships
 - Random start/destination assignments
 - Random automation levels (0-5)
-- Random capacities and cargo types
-- Performance metrics output
+- Random speeds (10-18 km/h) and RIS connectivity
+- **Realistic traffic behavior:**
+  - Dynamic speed adjustment based on vessel density
+  - Crossroad management with waiting times
+  - Congestion effects on travel time
+- Performance metrics output (travel time, waiting time, system time)
 - **CSV export of all ship data to `results/` directory**
 - Command-line and interactive modes
 
@@ -49,15 +53,23 @@ main(num_ships=20, seed=42, interactive=False)
 
 **Output:**
 - Console output with metrics and ship details
-- CSV file saved to `results/ship_simulation_YYYYMMDD_HHMMSS.csv` with columns:
+- **Ship summary CSV** saved to `results/ship_simulation_YYYYMMDD_HHMMSS.csv`:
   - ship_id
   - automation_level
+  - base_speed_kmh
+  - ris_connected
   - origin
   - destination
   - distance_km
   - travel_time_hours
+  - waiting_time_hours (NEW in v0.4.0)
+  - total_time_hours (NEW in v0.4.0)
   - state
   - route (full path)
+- **Time series CSV** saved to `results/ship_timeseries_YYYYMMDD_HHMMSS.csv`:
+  - Captures each vessel's state at every simulation step
+  - Includes effective_speed_kmh showing congestion impact (NEW in v0.4.0)
+  - Tracks waiting times and state changes
 
 ### 3. Simple Network Demo
 **File:** `simple_network_demo.py`

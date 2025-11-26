@@ -13,7 +13,8 @@ This project follows a **feature branch workflow** with semantic versioning:
 ```
 main
 ├── feature/simple-network (v0.2.0)
-└── feature/agent-model (v0.3.0)
+├── feature/agent-model (v0.3.0)
+└── feature/traffic-behavior (v0.4.0)
 ```
 
 #### Main Branch
@@ -29,6 +30,7 @@ main
 - **Examples**:
   - `feature/simple-network` - Network implementation (v0.2.0)
   - `feature/agent-model` - Agent implementation (v0.3.0)
+  - `feature/traffic-behavior` - Traffic behavior with congestion (v0.4.0)
 
 ---
 
@@ -48,6 +50,7 @@ MAJOR.MINOR.PATCH
 
 | Version | Date | Description | Branch |
 |---------|------|-------------|--------|
+| 0.4.0 | 2024-11-26 | Traffic behavior with congestion & crossroads | `feature/traffic-behavior` |
 | 0.3.0 | 2024-11-26 | Agent model for network-based ABM | `feature/agent-model` |
 | 0.2.0 | 2024-11-26 | Simple network module | `feature/simple-network` |
 | 0.1.0 | 2024-11-25 | Diffusion model implementation | `main` |
@@ -602,4 +605,110 @@ git log v0.2.0..v0.3.0
 
 ---
 
-*Last Updated: 2024-11-26 (v0.3.0)*
+## Feature Documentation
+
+### Traffic Behavior Module (v0.4.0)
+
+The traffic behavior module introduces realistic inland waterway simulation with dynamic speed adjustments and crossroad management.
+
+#### Key Components
+
+**1. TrafficManager** (`src/models/traffic.py`)
+- Coordinates traffic behavior across the entire network
+- Tracks vessel positions on edges
+- Manages crossroad occupation and queuing
+- Calculates dynamic travel times based on congestion
+
+**2. EdgeTraffic**
+- Tracks vessel density on each edge
+- Calculates effective speed based on congestion
+- Edge capacity: 12 vessels per kilometer
+
+**3. CrossroadState**
+- Manages crossroad occupation (First-Come-First-Served)
+- Maintains waiting queues
+- 30-minute transit time per vessel
+
+#### Modeling Assumptions
+
+All assumptions are clearly documented in the module docstring:
+
+1. **Edge Capacity**
+   - Rhine waterway width: 200-400m navigable channel
+   - Inland vessel length: ~85-110m
+   - Safe separation: ~2 vessel lengths
+   - **Result**: 12 vessels per km per direction
+
+2. **Speed Reduction Model**
+   - Formula: `effective_speed = base_speed × (1 - 0.7 × density_ratio)`
+   - Maximum slowdown: 70% at full capacity
+   - Minimum speed: 30% of base speed
+
+3. **Crossroads**
+   - Identified as nodes with 3+ connections
+   - Transit time: 30 minutes
+   - Priority: First-come-first-served (FCFS)
+
+4. **Distances**
+   - Straight-line distances between ports
+   - Actual river distances ~10-20% longer (not modeled)
+
+#### Usage Example
+
+```python
+from src.models.traffic import TrafficManager
+from src.models.network import Network
+
+# Create network
+network = create_rhine_network()
+
+# Initialize traffic manager
+traffic_mgr = TrafficManager(network)
+
+# Get effective speed considering congestion
+effective_speed = traffic_mgr.get_effective_speed(
+    agent_id="vessel_1",
+    base_speed=15.0,
+    source="Rotterdam",
+    target="Dordrecht"
+)
+
+# Check crossroad availability
+can_enter, wait_time = traffic_mgr.check_crossroad_entry(
+    agent_id="vessel_1",
+    node_id="Nijmegen"
+)
+```
+
+#### Enhanced Agent Tracking
+
+**New Agent Attribute:**
+- `waiting_time`: Tracks time spent waiting (traffic, crossroads)
+
+**Updated CSV Exports:**
+- Ship summary: `waiting_time_hours`, `total_time_hours`, `base_speed_kmh`
+- Time series: `effective_speed_kmh`, `waiting_time_hours`
+
+**Enhanced Metrics:**
+- Total/average waiting time
+- Total system time = travel time + waiting time
+
+#### Testing
+
+Run traffic behavior simulation:
+```bash
+# With 10 ships, seed 42
+python examples/agent_demo_random.py --non-interactive --ships 10 --seed 42
+
+# With 50 ships for higher congestion
+python examples/agent_demo_random.py --non-interactive --ships 50 --seed 123
+```
+
+Expected behavior:
+- Higher ship density → lower effective speeds
+- Crossroad waiting times appear in metrics
+- Time series shows speed variations due to congestion
+
+---
+
+*Last Updated: 2024-11-26 (v0.4.0)*

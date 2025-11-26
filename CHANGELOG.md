@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2024-11-26
+
+### Added
+- Traffic behavior module for realistic inland waterway simulations
+- Dynamic speed adjustment based on vessel density on edges
+- Crossroad management with waiting times and priority rules
+- TrafficManager class to coordinate traffic across the network
+- EdgeTraffic class to track vessel positions and calculate congestion
+- CrossroadState class for crossroad occupation and queuing
+- Agent waiting_time tracking attribute
+- Traffic-aware simulation in agent_demo_random.py
+
+### Changed
+- Agent model: Added `waiting_time` field for tracking delays
+- CSV exports now include:
+  - `waiting_time_hours` column in ship summary
+  - `effective_speed_kmh` column in time series (shows congestion impact)
+  - `total_time_hours` column (travel + waiting time)
+- Simulation metrics now include total and average waiting times
+- agent_demo_random.py updated to use TrafficManager for realistic behavior
+
+### Assumptions Documented
+- Edge capacity: 12 vessels per km based on Rhine waterway dimensions
+- Speed reduction model: Linear (70% max slowdown at capacity)
+- Crossroad transit time: 30 minutes per vessel
+- Minimum speed: 30% of base speed even at full capacity
+- Crossroad priority: First-come-first-served (FCFS)
+
+### Infrastructure
+- Updated CHANGELOG.md to version 0.4.0
+- Created feature/traffic-behavior branch
+
 ## [0.3.0] - 2024-11-26
 
 ### Added

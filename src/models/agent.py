@@ -84,6 +84,7 @@ class Agent:
     # Journey tracking
     journey_distance: float = 0.0
     journey_time: float = 0.0
+    waiting_time: float = 0.0  # Time spent waiting (traffic, crossroads)
     route_index: int = 0
 
     def __post_init__(self):
@@ -247,6 +248,7 @@ class Agent:
             'properties': self.properties,
             'journey_distance': self.journey_distance,
             'journey_time': self.journey_time,
+            'waiting_time': self.waiting_time,
             'route_index': self.route_index
         }
 
@@ -277,6 +279,7 @@ class Agent:
             properties=data.get('properties', {}),
             journey_distance=data.get('journey_distance', 0.0),
             journey_time=data.get('journey_time', 0.0),
+            waiting_time=data.get('waiting_time', 0.0),
             route_index=data.get('route_index', 0)
         )
 

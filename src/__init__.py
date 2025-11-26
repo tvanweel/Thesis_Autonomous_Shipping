@@ -5,12 +5,13 @@ A simulation framework for analyzing autonomous shipping technology adoption
 and its impact on inland waterway transportation.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Tijn van Weel"
 __description__ = "ABM framework for autonomous shipping research"
 
 # Version history
 __changelog__ = {
+    "0.4.0": "Added realistic traffic behavior with congestion and crossroad management",
     "0.3.0": "Added agent model for network-based ABM simulations",
     "0.2.0": "Added simple network module for ABM modeling",
     "0.1.0": "Initial diffusion model implementation",
@@ -36,6 +37,12 @@ from src.models.agent import (
     reset_agent_id_counter
 )
 
+from src.models.traffic import (
+    TrafficManager,
+    EdgeTraffic,
+    CrossroadState
+)
+
 __all__ = [
     # Version info
     "__version__",
@@ -56,4 +63,9 @@ __all__ = [
     "AgentState",
     "create_agent",
     "reset_agent_id_counter",
+
+    # Traffic models
+    "TrafficManager",
+    "EdgeTraffic",
+    "CrossroadState",
 ]
