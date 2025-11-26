@@ -75,6 +75,29 @@ class TestAgent:
         assert agent.properties["capacity"] == 1000
         assert agent.properties["speed"] == 20
 
+    def test_agent_with_automation_level(self):
+        """Test agent creation with automation level."""
+        agent = Agent(
+            agent_id="agent1",
+            agent_type="vessel",
+            current_node="A",
+            origin="A",
+            automation_level=3
+        )
+
+        assert agent.automation_level == 3
+
+    def test_agent_default_automation_level(self):
+        """Test that default automation level is 0 (manual)."""
+        agent = Agent(
+            agent_id="agent1",
+            agent_type="vessel",
+            current_node="A",
+            origin="A"
+        )
+
+        assert agent.automation_level == 0
+
     def test_agent_route_initialization(self):
         """Test that route is initialized with current node."""
         agent = Agent(
@@ -376,6 +399,7 @@ class TestAgent:
             agent_type="vessel",
             current_node="B",
             origin="A",
+            automation_level=3,
             destination="C",
             route=["A", "B", "C"],
             state=AgentState.TRAVELING,
@@ -391,6 +415,7 @@ class TestAgent:
         assert data["agent_type"] == "vessel"
         assert data["current_node"] == "B"
         assert data["origin"] == "A"
+        assert data["automation_level"] == 3
         assert data["destination"] == "C"
         assert data["route"] == ["A", "B", "C"]
         assert data["state"] == "traveling"
@@ -406,6 +431,7 @@ class TestAgent:
             "agent_type": "vessel",
             "current_node": "B",
             "origin": "A",
+            "automation_level": 4,
             "destination": "C",
             "route": ["A", "B", "C"],
             "state": "traveling",
@@ -421,6 +447,7 @@ class TestAgent:
         assert agent.agent_type == "vessel"
         assert agent.current_node == "B"
         assert agent.origin == "A"
+        assert agent.automation_level == 4
         assert agent.destination == "C"
         assert agent.route == ["A", "B", "C"]
         assert agent.state == AgentState.TRAVELING
@@ -497,6 +524,19 @@ class TestCreateAgent:
 
         assert agent.properties["capacity"] == 1000
         assert agent.properties["speed"] == 20
+
+    def test_create_agent_with_automation_level(self):
+        """Test creating agent with automation level."""
+        agent = create_agent(
+            "vessel",
+            "A",
+            "A",
+            automation_level=5,
+            capacity=2500
+        )
+
+        assert agent.automation_level == 5
+        assert agent.properties["capacity"] == 2500
 
     def test_reset_agent_id_counter(self):
         """Test resetting the agent ID counter."""

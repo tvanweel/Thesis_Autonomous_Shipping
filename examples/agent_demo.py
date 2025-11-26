@@ -76,6 +76,7 @@ def main():
             "vessel",
             "Rotterdam",
             "Rotterdam",
+            automation_level=2,
             capacity=2500,
             cargo_type="container"
         ),
@@ -83,6 +84,7 @@ def main():
             "vessel",
             "Dordrecht",
             "Dordrecht",
+            automation_level=3,
             capacity=3000,
             cargo_type="bulk"
         ),
@@ -90,6 +92,7 @@ def main():
             "vessel",
             "Rotterdam",
             "Rotterdam",
+            automation_level=5,
             capacity=2000,
             cargo_type="tanker"
         ),
@@ -97,6 +100,7 @@ def main():
 
     for agent in agents:
         print(f"Created: {agent}")
+        print(f"  Automation Level: L{agent.automation_level}")
         print(f"  Capacity: {agent.get_property('capacity')} tonnes")
         print(f"  Cargo type: {agent.get_property('cargo_type')}")
         print()

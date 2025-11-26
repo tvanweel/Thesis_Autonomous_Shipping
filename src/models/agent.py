@@ -43,6 +43,7 @@ class Agent:
         agent_type: Type/category (e.g., "vessel", "vehicle", "person", "robot")
         current_node: Current node ID in the network
         origin: Starting node ID
+        automation_level: Level of automation (0-5, where 0=manual, 5=fully autonomous)
         destination: Target node ID (optional, None if no destination set)
         route: Planned route as list of node IDs
         state: Current operational state (IDLE, TRAVELING, AT_DESTINATION, STOPPED)
@@ -57,7 +58,8 @@ class Agent:
         ...     agent_id="agent_1",
         ...     agent_type="vehicle",
         ...     current_node="A",
-        ...     origin="A"
+        ...     origin="A",
+        ...     automation_level=3
         ... )
         >>>
         >>> # Add domain-specific properties
@@ -69,6 +71,7 @@ class Agent:
     agent_type: str
     current_node: str
     origin: str
+    automation_level: int = 0  # 0=manual, 1-5=increasing autonomy
     destination: Optional[str] = None
     route: List[str] = field(default_factory=list)
     state: AgentState = AgentState.IDLE
@@ -231,6 +234,7 @@ class Agent:
             'agent_type': self.agent_type,
             'current_node': self.current_node,
             'origin': self.origin,
+            'automation_level': self.automation_level,
             'destination': self.destination,
             'route': self.route,
             'state': self.state.value,
@@ -258,6 +262,7 @@ class Agent:
             agent_type=data['agent_type'],
             current_node=data['current_node'],
             origin=data['origin'],
+            automation_level=data.get('automation_level', 0),
             destination=data.get('destination'),
             route=data.get('route', []),
             state=state,
@@ -282,6 +287,7 @@ def create_agent(
     agent_type: str,
     current_node: str,
     origin: str,
+    automation_level: int = 0,
     agent_id: Optional[str] = None,
     **properties
 ) -> Agent:
@@ -296,6 +302,7 @@ def create_agent(
         agent_type: Type of agent (e.g., "vessel", "vehicle", "person")
         current_node: Current location in network
         origin: Origin node ID
+        automation_level: Level of automation (0-5, default 0)
         agent_id: Optional custom ID (auto-generated as "type_N" if None)
         **properties: Domain-specific properties stored in agent.properties
 
@@ -303,19 +310,21 @@ def create_agent(
         Agent instance with populated properties
 
     Example:
-        >>> # Create agent with domain-specific properties
+        >>> # Create agent with automation level and domain-specific properties
         >>> vessel = create_agent(
         ...     "vessel",
         ...     "Rotterdam",
         ...     "Rotterdam",
+        ...     automation_level=3,
         ...     capacity=2500,
         ...     cargo_type="container",
         ...     speed=14.0
         ... )
+        >>> vessel.automation_level  # 3
         >>> vessel.get_property("capacity")  # 2500
         >>>
-        >>> # Create minimal agent
-        >>> agent = create_agent("robot", "A", "A")
+        >>> # Create minimal manual agent
+        >>> agent = create_agent("robot", "A", "A", automation_level=0)
         >>> agent.agent_id  # "robot_0"
     """
     global _agent_id_counter
@@ -329,6 +338,7 @@ def create_agent(
         agent_type=agent_type,
         current_node=current_node,
         origin=origin,
+        automation_level=automation_level,
         properties=properties
     )
 
