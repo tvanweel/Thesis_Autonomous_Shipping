@@ -44,10 +44,12 @@ class Agent:
         current_node: Current node ID in the network
         origin: Starting node ID
         automation_level: Level of automation (0-5, where 0=manual, 5=fully autonomous)
+        speed: Speed in km/h (default: 14.0 for inland vessels)
+        ris_connected: Whether agent is connected to River Information Services (default: False)
         destination: Target node ID (optional, None if no destination set)
         route: Planned route as list of node IDs
         state: Current operational state (IDLE, TRAVELING, AT_DESTINATION, STOPPED)
-        properties: Dictionary for domain-specific properties (capacity, speed, etc.)
+        properties: Dictionary for domain-specific properties (capacity, cargo, etc.)
         journey_distance: Cumulative distance traveled
         journey_time: Cumulative time elapsed
         route_index: Current position in route (0 = at origin)
@@ -72,6 +74,8 @@ class Agent:
     current_node: str
     origin: str
     automation_level: int = 0  # 0=manual, 1-5=increasing autonomy
+    speed: float = 14.0  # km/h (default for inland vessels)
+    ris_connected: bool = False  # River Information Services connectivity
     destination: Optional[str] = None
     route: List[str] = field(default_factory=list)
     state: AgentState = AgentState.IDLE
@@ -235,6 +239,8 @@ class Agent:
             'current_node': self.current_node,
             'origin': self.origin,
             'automation_level': self.automation_level,
+            'speed': self.speed,
+            'ris_connected': self.ris_connected,
             'destination': self.destination,
             'route': self.route,
             'state': self.state.value,
@@ -263,6 +269,8 @@ class Agent:
             current_node=data['current_node'],
             origin=data['origin'],
             automation_level=data.get('automation_level', 0),
+            speed=data.get('speed', 14.0),
+            ris_connected=data.get('ris_connected', False),
             destination=data.get('destination'),
             route=data.get('route', []),
             state=state,
@@ -288,6 +296,8 @@ def create_agent(
     current_node: str,
     origin: str,
     automation_level: int = 0,
+    speed: float = 14.0,
+    ris_connected: bool = False,
     agent_id: Optional[str] = None,
     **properties
 ) -> Agent:
@@ -303,6 +313,8 @@ def create_agent(
         current_node: Current location in network
         origin: Origin node ID
         automation_level: Level of automation (0-5, default 0)
+        speed: Speed in km/h (default 14.0 for inland vessels)
+        ris_connected: River Information Services connectivity (default False)
         agent_id: Optional custom ID (auto-generated as "type_N" if None)
         **properties: Domain-specific properties stored in agent.properties
 
@@ -310,18 +322,18 @@ def create_agent(
         Agent instance with populated properties
 
     Example:
-        >>> # Create agent with automation level and domain-specific properties
+        >>> # Create agent with automation level and features
         >>> vessel = create_agent(
         ...     "vessel",
         ...     "Rotterdam",
         ...     "Rotterdam",
         ...     automation_level=3,
-        ...     capacity=2500,
-        ...     cargo_type="container",
-        ...     speed=14.0
+        ...     speed=16.0,
+        ...     ris_connected=True
         ... )
         >>> vessel.automation_level  # 3
-        >>> vessel.get_property("capacity")  # 2500
+        >>> vessel.speed  # 16.0
+        >>> vessel.ris_connected  # True
         >>>
         >>> # Create minimal manual agent
         >>> agent = create_agent("robot", "A", "A", automation_level=0)
@@ -339,6 +351,8 @@ def create_agent(
         current_node=current_node,
         origin=origin,
         automation_level=automation_level,
+        speed=speed,
+        ris_connected=ris_connected,
         properties=properties
     )
 

@@ -103,12 +103,26 @@ def create_random_ships(
         # Random automation level (0-5)
         automation_level = random.randint(0, 5)
 
+        # Random speed (10-18 km/h for inland vessels)
+        speed = random.uniform(10.0, 18.0)
+
+        # Random RIS connectivity (higher automation -> higher chance of RIS)
+        # L0-L2: 20% chance, L3-L4: 60% chance, L5: 90% chance
+        if automation_level <= 2:
+            ris_connected = random.random() < 0.2
+        elif automation_level <= 4:
+            ris_connected = random.random() < 0.6
+        else:
+            ris_connected = random.random() < 0.9
+
         # Create agent
         ship = create_agent(
             "vessel",
             start,
             start,
-            automation_level=automation_level
+            automation_level=automation_level,
+            speed=speed,
+            ris_connected=ris_connected
         )
 
         # Set destination
@@ -153,6 +167,8 @@ def export_ships_to_csv(ships: List[Agent], metrics: dict, filename: str = None)
         writer.writerow([
             'ship_id',
             'automation_level',
+            'speed_kmh',
+            'ris_connected',
             'origin',
             'destination',
             'distance_km',
@@ -166,6 +182,8 @@ def export_ships_to_csv(ships: List[Agent], metrics: dict, filename: str = None)
             writer.writerow([
                 ship.agent_id,
                 ship.automation_level,
+                f"{ship.speed:.2f}",
+                ship.ris_connected,
                 ship.origin,
                 ship.destination,
                 f"{ship.journey_distance:.2f}",
@@ -177,13 +195,75 @@ def export_ships_to_csv(ships: List[Agent], metrics: dict, filename: str = None)
     return str(filepath)
 
 
+def export_timeseries_to_csv(history: List[dict], filename: str = None) -> str:
+    """
+    Export simulation time series data to CSV file.
+
+    Args:
+        history: List of step snapshots with ship states
+        filename: Optional filename (auto-generated if None)
+
+    Returns:
+        Path to created CSV file
+    """
+    # Create results directory if it doesn't exist
+    results_dir = Path(__file__).parent.parent / "results"
+    results_dir.mkdir(exist_ok=True)
+
+    # Generate filename if not provided
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"ship_timeseries_{timestamp}.csv"
+
+    filepath = results_dir / filename
+
+    # Write CSV
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+
+        # Header
+        writer.writerow([
+            'step',
+            'ship_id',
+            'automation_level',
+            'speed_kmh',
+            'ris_connected',
+            'current_node',
+            'destination',
+            'state',
+            'distance_traveled_km',
+            'time_elapsed_hours',
+            'next_node'
+        ])
+
+        # Time series data
+        for step_data in history:
+            step = step_data['step']
+            for ship_state in step_data['ships']:
+                writer.writerow([
+                    step,
+                    ship_state['ship_id'],
+                    ship_state['automation_level'],
+                    f"{ship_state['speed']:.2f}",
+                    ship_state['ris_connected'],
+                    ship_state['current_node'],
+                    ship_state['destination'],
+                    ship_state['state'],
+                    f"{ship_state['distance_traveled']:.2f}",
+                    f"{ship_state['time_elapsed']:.2f}",
+                    ship_state['next_node'] or ''
+                ])
+
+    return str(filepath)
+
+
 def run_simulation(
     num_ships: int = 10,
     max_steps: int = 100,
     seed: int = None
-) -> Tuple[List[Agent], dict]:
+) -> Tuple[List[Agent], dict, List[dict]]:
     """
-    Run the complete simulation without cyber attacks.
+    Run the complete simulation without disruptions.
 
     Args:
         num_ships: Number of ships to simulate
@@ -191,7 +271,7 @@ def run_simulation(
         seed: Random seed for reproducibility
 
     Returns:
-        Tuple of (agents list, metrics dict)
+        Tuple of (agents list, metrics dict, history list)
     """
     if seed is not None:
         random.seed(seed)
@@ -210,8 +290,8 @@ def run_simulation(
     # Track when ships enter/exit
     ship_exit_step = {}
 
-    # Average speed: 14 km/h
-    avg_speed = 14.0
+    # Track history for time series export
+    history = []
 
     # Run simulation
     step = 0
@@ -220,7 +300,26 @@ def run_simulation(
     while step < max_steps and active_ships:
         step += 1
 
+        # Capture state before step
+        step_snapshot = {
+            'step': step,
+            'ships': []
+        }
+
         for ship in ships:
+            step_snapshot['ships'].append({
+                'ship_id': ship.agent_id,
+                'automation_level': ship.automation_level,
+                'speed': ship.speed,
+                'ris_connected': ship.ris_connected,
+                'current_node': ship.current_node,
+                'destination': ship.destination,
+                'state': ship.state.value,
+                'distance_traveled': ship.journey_distance,
+                'time_elapsed': ship.journey_time,
+                'next_node': ship.next_node
+            })
+
             if ship.agent_id not in active_ships:
                 continue
 
@@ -239,8 +338,8 @@ def run_simulation(
                 except:
                     edge_distance = 10.0
 
-                # Calculate travel time
-                travel_time = edge_distance / avg_speed
+                # Calculate travel time using ship's own speed
+                travel_time = edge_distance / ship.speed
 
                 # Move agent
                 ship.advance_to_next_node(
@@ -252,6 +351,9 @@ def run_simulation(
             if ship.is_at_destination and ship.agent_id in active_ships:
                 ship_exit_step[ship.agent_id] = step
                 active_ships.remove(ship.agent_id)
+
+        # Save step snapshot to history
+        history.append(step_snapshot)
 
     # Calculate metrics
     for ship in ships:
@@ -271,7 +373,7 @@ def run_simulation(
         'simulation_steps': step,
     }
 
-    return ships, metrics
+    return ships, metrics, history
 
 
 def main(
@@ -324,7 +426,7 @@ def main(
     print()
 
     # Run simulation
-    ships, metrics = run_simulation(
+    ships, metrics, history = run_simulation(
         num_ships=num_ships,
         max_steps=200,
         seed=seed
@@ -390,7 +492,10 @@ def main(
     print()
 
     csv_path = export_ships_to_csv(ships, metrics)
-    print(f"Ship data exported to: {csv_path}")
+    print(f"Ship summary exported to: {csv_path}")
+
+    timeseries_path = export_timeseries_to_csv(history)
+    print(f"Time series data exported to: {timeseries_path}")
     print()
 
     print("=" * 80)
