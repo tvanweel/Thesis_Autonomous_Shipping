@@ -7,15 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-11-26
+
 ### Added
-- Simple network module with Node and Edge classes
-- Network class with graph operations using NetworkX
-- Support for directed and undirected networks
-- Shortest path calculation between nodes
-- All simple paths enumeration
-- Network connectivity checks
-- Subgraph extraction
-- Dictionary serialization/deserialization
+- Agent model for network-based ABM simulations
+- Agent class with network navigation capabilities
+- AgentState enum for agent operational states (IDLE, TRAVELING, AT_DESTINATION, STOPPED)
+- Agent features:
+  - Set destination and plan routes through networks
+  - Travel along routes with distance/time tracking
+  - Stop/resume functionality
+  - Custom properties for agent specialization
+  - Journey tracking (distance, time, route progress)
+  - Dictionary serialization/deserialization
+- `create_agent()` factory function with automatic ID generation
+- Agent state management (IDLE, TRAVELING, AT_DESTINATION, STOPPED)
+
+### Infrastructure
+- Updated src/__init__.py to version 0.3.0
+- Extended models module with agent capabilities
 
 ## [0.2.0] - 2024-11-26
 
