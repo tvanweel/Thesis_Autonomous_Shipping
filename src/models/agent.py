@@ -1,8 +1,14 @@
 """
-Agent Model for Network-Based ABM
+Abstract Agent Model for Network-Based ABM
 
-Defines agents that can travel through networks, maintain state,
-and interact with the environment.
+Defines generic agents that can navigate through networks, maintain state,
+and track their journeys. The agent model is intentionally abstract and can
+represent any mobile entity (vessels, vehicles, people, robots, etc.) in
+agent-based simulations.
+
+The model is domain-agnostic - all domain-specific properties (cargo, capacity,
+speed, etc.) should be stored in the `properties` dictionary rather than as
+explicit attributes.
 """
 
 from dataclasses import dataclass, field
@@ -22,23 +28,42 @@ class AgentState(Enum):
 @dataclass
 class Agent:
     """
-    An agent that can navigate through a network.
+    Generic agent for network-based simulations.
 
-    Agents have a current location, destination, and can follow routes
-    through the network. They maintain state and track their journey.
+    This is an abstract agent model that can represent any mobile entity
+    in an agent-based simulation. The agent navigates through a network,
+    maintains its state, and tracks journey metrics.
+
+    The model is intentionally minimal and domain-agnostic. All domain-specific
+    attributes (cargo capacity, speed, fuel, etc.) should be stored in the
+    `properties` dictionary.
 
     Attributes:
         agent_id: Unique identifier for the agent
-        agent_type: Type/category of agent (e.g., "vessel", "vehicle")
+        agent_type: Type/category (e.g., "vessel", "vehicle", "person", "robot")
         current_node: Current node ID in the network
         origin: Starting node ID
-        destination: Target node ID (optional)
+        destination: Target node ID (optional, None if no destination set)
         route: Planned route as list of node IDs
-        state: Current operational state
-        properties: Custom agent properties
-        journey_distance: Total distance traveled
-        journey_time: Total time elapsed
-        route_index: Current position in route
+        state: Current operational state (IDLE, TRAVELING, AT_DESTINATION, STOPPED)
+        properties: Dictionary for domain-specific properties (capacity, speed, etc.)
+        journey_distance: Cumulative distance traveled
+        journey_time: Cumulative time elapsed
+        route_index: Current position in route (0 = at origin)
+
+    Example:
+        >>> # Create a generic agent
+        >>> agent = Agent(
+        ...     agent_id="agent_1",
+        ...     agent_type="vehicle",
+        ...     current_node="A",
+        ...     origin="A"
+        ... )
+        >>>
+        >>> # Add domain-specific properties
+        >>> agent.set_property("speed", 50)  # km/h
+        >>> agent.set_property("capacity", 100)  # units
+        >>> agent.set_property("fuel", 80.0)  # liters
     """
     agent_id: str
     agent_type: str
@@ -263,15 +288,35 @@ def create_agent(
     """
     Factory function to create agents with automatic ID generation.
 
+    Creates a generic agent and populates its properties dictionary with
+    any keyword arguments. This allows for flexible, domain-specific agent
+    creation without modifying the base Agent class.
+
     Args:
-        agent_type: Type of agent
-        current_node: Current location
-        origin: Origin node
-        agent_id: Optional custom ID (auto-generated if None)
-        **properties: Additional agent properties
+        agent_type: Type of agent (e.g., "vessel", "vehicle", "person")
+        current_node: Current location in network
+        origin: Origin node ID
+        agent_id: Optional custom ID (auto-generated as "type_N" if None)
+        **properties: Domain-specific properties stored in agent.properties
 
     Returns:
-        Agent instance
+        Agent instance with populated properties
+
+    Example:
+        >>> # Create agent with domain-specific properties
+        >>> vessel = create_agent(
+        ...     "vessel",
+        ...     "Rotterdam",
+        ...     "Rotterdam",
+        ...     capacity=2500,
+        ...     cargo_type="container",
+        ...     speed=14.0
+        ... )
+        >>> vessel.get_property("capacity")  # 2500
+        >>>
+        >>> # Create minimal agent
+        >>> agent = create_agent("robot", "A", "A")
+        >>> agent.agent_id  # "robot_0"
     """
     global _agent_id_counter
 
