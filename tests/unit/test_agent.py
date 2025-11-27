@@ -518,12 +518,14 @@ class TestCreateAgent:
             "vessel",
             "A",
             "A",
-            capacity=1000,
-            speed=20
+            speed=20,
+            capacity=1000
         )
 
+        # speed is an explicit agent attribute, not a property
+        assert agent.speed == 20
+        # capacity goes into properties dict
         assert agent.properties["capacity"] == 1000
-        assert agent.properties["speed"] == 20
 
     def test_create_agent_with_automation_level(self):
         """Test creating agent with automation level."""

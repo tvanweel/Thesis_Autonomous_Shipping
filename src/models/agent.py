@@ -15,6 +15,11 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from src.models.network import Network
+from src.assumptions import get_agent_config
+
+# Load agent configuration from assumptions
+_AGENT_CONFIG = get_agent_config()
+_DEFAULT_SPEED = _AGENT_CONFIG["default_vessel_speed_kmh"]
 
 
 class AgentState(Enum):
@@ -74,7 +79,7 @@ class Agent:
     current_node: str
     origin: str
     automation_level: int = 0  # 0=manual, 1-5=increasing autonomy
-    speed: float = 14.0  # km/h (default for inland vessels)
+    speed: float = _DEFAULT_SPEED  # km/h (loaded from assumptions)
     ris_connected: bool = False  # River Information Services connectivity
     destination: Optional[str] = None
     route: List[str] = field(default_factory=list)
@@ -271,7 +276,7 @@ class Agent:
             current_node=data['current_node'],
             origin=data['origin'],
             automation_level=data.get('automation_level', 0),
-            speed=data.get('speed', 14.0),
+            speed=data.get('speed', _DEFAULT_SPEED),
             ris_connected=data.get('ris_connected', False),
             destination=data.get('destination'),
             route=data.get('route', []),
@@ -299,7 +304,7 @@ def create_agent(
     current_node: str,
     origin: str,
     automation_level: int = 0,
-    speed: float = 14.0,
+    speed: float = None,  # None means use default from assumptions
     ris_connected: bool = False,
     agent_id: Optional[str] = None,
     **properties
@@ -347,6 +352,10 @@ def create_agent(
     if agent_id is None:
         agent_id = f"{agent_type}_{_agent_id_counter}"
         _agent_id_counter += 1
+
+    # Use default speed from assumptions if not specified
+    if speed is None:
+        speed = _DEFAULT_SPEED
 
     return Agent(
         agent_id=agent_id,

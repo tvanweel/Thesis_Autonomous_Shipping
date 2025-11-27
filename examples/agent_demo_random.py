@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.models.network import Network, Node, Edge
 from src.models.agent import Agent, AgentState, create_agent, reset_agent_id_counter
 from src.models.traffic import TrafficManager
+from src.assumptions import get_agent_config
 
 
 def create_rhine_network() -> Network:
@@ -93,6 +94,12 @@ def create_random_ships(
         List of Agent objects
     """
     reset_agent_id_counter()
+
+    # Load agent configuration from assumptions
+    agent_config = get_agent_config()
+    speed_min, speed_max = agent_config["vessel_speed_range_kmh"]
+    ris_probs = agent_config["ris_connectivity_by_level"]
+
     ships = []
 
     for i in range(num_ships):
@@ -106,17 +113,16 @@ def create_random_ships(
         # Random automation level (0-5)
         automation_level = random.randint(0, 5)
 
-        # Random speed (10-18 km/h for inland vessels)
-        speed = random.uniform(10.0, 18.0)
+        # Random speed from configured range
+        speed = random.uniform(speed_min, speed_max)
 
-        # RIS connectivity (higher automation -> higher chance of RIS)
-        # L0-L2: 20% chance, L3-L4: 60% chance, L5: 90% chance
+        # RIS connectivity based on automation level (from assumptions)
         if automation_level <= 2:
-            ris_connected = random.random() < 0.2
+            ris_connected = random.random() < ris_probs["L0_L2"]
         elif automation_level <= 4:
-            ris_connected = random.random() < 0.6
+            ris_connected = random.random() < ris_probs["L3_L4"]
         else:
-            ris_connected = random.random() < 0.9
+            ris_connected = random.random() < ris_probs["L5"]
 
         # Create agent
         ship = create_agent(

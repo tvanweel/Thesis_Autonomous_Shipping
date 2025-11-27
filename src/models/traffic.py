@@ -37,12 +37,14 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 
+from src.assumptions import get_traffic_config
 
-# Traffic model constants
-VESSELS_PER_KM_CAPACITY = 12  # Maximum vessels per km of waterway
-CONGESTION_IMPACT_FACTOR = 0.7  # Maximum speed reduction (70%)
-CROSSROAD_TRANSIT_TIME = 0.5  # Hours to transit through crossroad (30 min)
-MIN_SPEED_RATIO = 0.3  # Minimum speed is 30% of base speed
+# Load traffic model configuration from assumptions
+_TRAFFIC_CONFIG = get_traffic_config()
+VESSELS_PER_KM_CAPACITY = _TRAFFIC_CONFIG["vessels_per_km_capacity"]
+CONGESTION_IMPACT_FACTOR = _TRAFFIC_CONFIG["congestion_impact_factor"]
+CROSSROAD_TRANSIT_TIME = _TRAFFIC_CONFIG["crossroad_transit_time_hours"]
+MIN_SPEED_RATIO = _TRAFFIC_CONFIG["min_speed_ratio"]
 
 
 @dataclass
